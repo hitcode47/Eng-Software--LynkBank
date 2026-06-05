@@ -1,3 +1,6 @@
+"Página a ser explicada"
+
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,11 +13,9 @@ function formatDate(dateString) {
   });
 }
 
-function getCoverUrl(book) {
-  return book.cover || book.cover_url || book.image || book.coverImage || null;
-}
 
 export default function Dashboard({ apiUrl }) {
+  
   const navigate = useNavigate();
   const [loanBooks, setLoanBooks] = useState([]);
   const [books, setBooks] = useState([]);
@@ -25,6 +26,7 @@ export default function Dashboard({ apiUrl }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loanRequests, setLoanRequests] = useState([]);
 
+"Carrega os empréstimos ativos do usuário."
 const loadLoanBooks = async () => {
   setLoading(true);
   setError(null);
@@ -43,7 +45,6 @@ const loadLoanBooks = async () => {
     }
 
     const loans = await loansResponse.json();
-
     const loanBooksPromises = loans.map(async (loan) => {
       const bookResponse = await fetch(`${apiUrl}/api/books/${loan.book_id}`);
       const book = await bookResponse.json();
@@ -62,6 +63,7 @@ const loadLoanBooks = async () => {
   }
 };
 
+"Carrega as solicitações de empréstimo feitas pelo usuário."
 const fetchLoanRequests = async () => {
   try {
     const token = localStorage.getItem("token");
@@ -83,8 +85,7 @@ const fetchLoanRequests = async () => {
     console.error("Erro ao carregar solicitações:", err);
   }
 };
-
-
+"Renova um empréstimo ativo"
 async function handleRenew(loanId) {
   try {
     const token = localStorage.getItem("token");
@@ -114,138 +115,143 @@ async function handleRenew(loanId) {
   }
 }
 
-  useEffect(() => {
-    async function fetchUserData() {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          navigate('/login-user');
-          return;
-        }
-
-        const userResponse = await fetch('http://localhost:5000/api/auth/user', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (!userResponse.ok) {
-          throw new Error('Falha ao buscar dados do usuário');
-        }
-
-        const userData = await userResponse.json();
-        setCurrentUser(userData);
-        localStorage.setItem('currentUser', JSON.stringify(userData));
-
-        await loadLoanBooks();
-        await fetchLoanRequests();
-
-      } catch (err) {
-        console.error('Erro ao buscar dados do usuário:', err);
-        setError('Erro ao carregar dados do usuário.');
-        localStorage.removeItem('token');
-        localStorage.removeItem('currentUser');
-        navigate('/login-user');
-      }
-    }
-
-    async function loadBooks() {
-      try {
-        const response = await fetch(`${apiUrl}/books`);
-        const data = await response.json();
-        setBooks(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error("Erro ao carregar livros:", err);
-      }
-    }
-
-    fetchUserData();
-    loadBooks();
-  }, [apiUrl, navigate]);
-
-  const filteredBooks = books.filter((book) => {
-    const term = query.toLowerCase();
-    return (
-      book.title.toLowerCase().includes(term) ||
-      book.author.toLowerCase().includes(term) ||
-      String(book.year).includes(term)
-    );
-  });
-
-  async function handleRequestLoan(bookId) {
-    setError(null);
-    setMessage(null);
-
+"Busca os dados do usuário autenticado e redireciona para login se não estiver autenticado ou se ocorrer um erro."
+async function fetchUserData() {
+  try {
     const token = localStorage.getItem('token');
     if (!token) {
-      setError("Você precisa estar logado para solicitar um livro emprestado.");
       navigate('/login-user');
       return;
     }
-
-    if (!currentUser) {
-      setError("Usuário não autenticado.");
-      return;
-    }
-
-    try {
-      const response = await fetch(`${apiUrl}/api/loan-requests`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ book_id: bookId }),
-      });
-      const result = await response.json();
-      console.log('Loan request response:', result);
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('currentUser');
-          setError("Sua sessão expirou. Faça login novamente.");
-          navigate('/login-user');
-          return;
-        }
-        setError(result.error || "Não foi possível enviar a solicitação.");
-        return;
+    const userResponse = await fetch('http://localhost:5000/api/auth/user', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       }
-
-      setMessage("Solicitação enviada ao administrador para aprovação.");
-      await fetchLoanRequests();
-    } catch (err) {
-      setError("Erro na comunicação com o servidor.");
+    });
+    if (!userResponse.ok) {
+      throw new Error('Falha ao buscar dados do usuário');
     }
-  }
-
-  async function handleReturn(loanId) {
-    setError(null);
-    setMessage(null);
-    try {
-      const response = await fetch(`${apiUrl}/loans/${loanId}/return`, {
-        method: "PUT",
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        setError(result.error || "Falha ao devolver o livro.");
-        return;
-      }
-      setMessage("Livro devolvido com sucesso.");
-      setLoanBooks((prev) => prev.filter((loanBook) => loanBook.id !== loanId));
-    } catch (err) {
-      setError("Erro na comunicação com o servidor.");
-    }
-  }
-
-  function handleLogout() {
+    const userData = await userResponse.json();
+    setCurrentUser(userData);
+    localStorage.setItem('currentUser', JSON.stringify(userData));
+    await loadLoanBooks();
+    await fetchLoanRequests();
+  } catch (err) {
+    console.error('Erro ao buscar dados do usuário:', err);
+    setError('Erro ao carregar dados do usuário.');
     localStorage.removeItem('token');
     localStorage.removeItem('currentUser');
-    navigate('/');
+    navigate('/login-user');
   }
+}
 
-  const activeLoanBooks = loanBooks;
+"Carrega a lista de livros disponíveis para empréstimo."
+async function loadBooks() {
+  try {
+    const response = await fetch(`${apiUrl}/books`);
+    const data = await response.json();
+    setBooks(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error("Erro ao carregar livros:", err);
+  }
+}
+
+
+"Carrega os dados do usuário e os livros disponíveis ao montar o componente."
+useEffect(() => {
+  fetchUserData();
+  loadBooks();
+}, [apiUrl, navigate]);
+
+"Filtra os livros com base na consulta de busca do usuário."
+const filteredBooks = books.filter((book) => {
+  const term = query.toLowerCase();
+  return (
+    book.title.toLowerCase().includes(term) ||
+    book.author.toLowerCase().includes(term) ||
+    String(book.year).includes(term)
+  );
+});
+
+"Solicita um empréstimo para um livro específico."
+async function handleRequestLoan(bookId) {
+  setError(null);
+  setMessage(null);
+  const token = localStorage.getItem('token');
+  if (!token) {
+    setError("Você precisa estar logado para solicitar um livro emprestado.");
+    navigate('/login-user');
+    return;
+  }
+  if (!currentUser) {
+    setError("Usuário não autenticado.");
+    return;
+  }
+  try {
+    const response = await fetch(`${apiUrl}/api/loan-requests`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ book_id: bookId }),
+    });
+    const result = await response.json();
+    console.log('Loan request response:', result);
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('currentUser');
+        setError("Sua sessão expirou. Faça login novamente.");
+        navigate('/login-user');
+        return;
+      }
+      setError(result.error || "Não foi possível enviar a solicitação.");
+      return;
+    }
+    setMessage("Solicitação enviada ao administrador para aprovação.");
+    await fetchLoanRequests();
+  } catch (err) {
+    setError("Erro na comunicação com o servidor.");
+  }
+}
+
+"Devolve um livro emprestado, removendo-o da lista de empréstimos ativos."
+async function handleReturn(loanId) {
+  setError(null);
+  setMessage(null);
+  try {
+    const response = await fetch(`${apiUrl}/loans/${loanId}/return`, {
+      method: "PUT",
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      setError(result.error || "Falha ao devolver o livro.");
+      return;
+    }
+    setMessage("Livro devolvido com sucesso.");
+    setLoanBooks((prev) => prev.filter((loanBook) => loanBook.id !== loanId));
+  } catch (err) {
+    setError("Erro na comunicação com o servidor.");
+  }
+}
+
+
+"Realiza o logout do usuário, limpando os dados de autenticação e redirecionando para a página de login."
+function handleLogout() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('currentUser');
+  navigate('/');
+}
+
+function getCoverUrl(book) {
+  return book.cover || book.cover_url || book.image || book.coverImage || null;
+}
+
+"Filtra os empréstimos para mostrar apenas os ativos (aqueles que ainda não foram devolvidos)."
+const activeLoanBooks = loanBooks;
 
   return (
     <section>

@@ -680,6 +680,35 @@ def get_book(book_id):
     except Exception as e:
         return jsonify({'message': f'Erro ao buscar livro: {str(e)}'}), 500
 
+@app.route('/books/<int:book_id>', methods=['DELETE'])
+def delete_book(book_id):
+    """Delete a book from the database"""
+    try:
+        conn = get_db_books()
+        cursor = conn.cursor()
+        
+        # Verify book exists
+        cursor.execute('SELECT id, title FROM books WHERE id = ?', (book_id,))
+        book = cursor.fetchone()
+        
+        if not book:
+            conn.close()
+            return jsonify({'error': 'Livro não encontrado'}), 404
+        
+        # Delete the book
+        cursor.execute('DELETE FROM books WHERE id = ?', (book_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Livro "{book["title"]}" deletado com sucesso',
+            'book_id': book_id
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': f'Erro ao deletar livro: {str(e)}'}), 500
+
+
 @app.route('/api/admin/loans/<int:loan_id>/return', methods=['PUT'])
 @verificar_token
 def admin_return_loan(token, loan_id):

@@ -255,6 +255,37 @@ async function rejectRequest(requestId) {
   }
 }
 
+async function handleDeleteBook(bookId, bookTitle) {
+  const confirmDelete = window.confirm(
+    `Tem certeza que deseja excluir o livro "${bookTitle}"?`
+  );
+
+  if (!confirmDelete) return;
+
+  setLoading(true);
+
+  try {
+    const response = await fetch(`${apiUrl}/books/${bookId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const result = await response.json();
+      throw new Error(result.error || "Erro ao excluir livro");
+    }
+
+    setMessage(`Livro "${bookTitle}" excluído com sucesso.`);
+    await fetchBooks();
+  } catch (err) {
+    setError(err.message || "Erro ao excluir livro");
+  } finally {
+    setLoading(false);
+  }
+}
+
   return (
     <section>
       <div className="card">
@@ -392,6 +423,17 @@ async function rejectRequest(requestId) {
                   <p>
                     <strong>Quantidade:</strong> {book.quantity}
                   </p>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => handleDeleteBook(book.id, book.title)}
+                    disabled={loading}
+                    style={{ marginTop: "12px", backgroundColor: "#dc3545", borderColor: "#dc3545" }}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = "#c82333"}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = "#dc3545"}
+                  >
+                    {loading ? "Processando..." : "Excluir livro"}
+                  </button>
                 </div>
               </div>
             );
