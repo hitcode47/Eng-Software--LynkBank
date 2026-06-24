@@ -246,17 +246,38 @@ def register():
         data = request.get_json()
         
         if not data or not all(k in data for k in ('name', 'email', 'password')):
-            return jsonify({'message': 'Nome, email e senha são obrigatórios'}), 400
+            return jsonify({
+                'success': False,
+                'message': 'Campos obrigatórios: nome, email e senha'
+            }), 400
         
         name = data['name'].strip()
         email = data['email'].strip().lower()
         password = data['password']
         
-        if len(password) < 6:
-            return jsonify({'message': 'Senha deve ter no mínimo 6 caracteres'}), 400
-        
         if not name:
-            return jsonify({'message': 'Nome não pode estar vazio'}), 400
+            return jsonify({
+                'success': False,
+                'message': 'Nome não pode estar vazio'
+            }), 400
+        
+        if len(name) > 100:
+            return jsonify({
+                'success': False,
+                'message': 'Nome não pode exceder 100 caracteres'
+            }), 400
+        
+        if len(password) < 6:
+            return jsonify({
+                'success': False,
+                'message': 'Senha deve ter no mínimo 6 caracteres'
+            }), 400
+        
+        if len(password) > 128:
+            return jsonify({
+                'success': False,
+                'message': 'Senha não pode exceder 128 caracteres'
+            }), 400
         
         password_hash = hash_password(password)
         
@@ -269,15 +290,22 @@ def register():
             conn.close()
             
             return jsonify({
+                'success': True,
                 'message': 'Usuário registrado com sucesso',
                 'email': email
             }), 201
         
         except sqlite3.IntegrityError:
-            return jsonify({'message': 'Email já está registrado'}), 409
+            return jsonify({
+                'success': False,
+                'message': 'Este email já está registrado. Por favor, use outro email ou faça login.'
+            }), 409
     
     except Exception as e:
-        return jsonify({'message': f'Erro ao registrar: {str(e)}'}), 500
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao registrar usuário. Por favor, tente novamente.'
+        }), 500
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
@@ -286,7 +314,10 @@ def login():
         data = request.get_json()
         
         if not data or not all(k in data for k in ('email', 'password')):
-            return jsonify({'message': 'Email e senha são obrigatórios'}), 400
+            return jsonify({
+                'success': False,
+                'message': 'Campos obrigatórios: email e senha'
+            }), 400
         
         email = data['email'].strip().lower()
         password = data['password']
@@ -299,7 +330,10 @@ def login():
         
         if not user:
             conn.close()
-            return jsonify({'message': 'Email ou senha incorretos'}), 401
+            return jsonify({
+                'success': False,
+                'message': 'Email ou senha incorretos'
+            }), 401
         
         user_id = user['id']
         name = user['name']
@@ -307,7 +341,10 @@ def login():
         
         if not verify_password(password, password_hash):
             conn.close()
-            return jsonify({'message': 'Email ou senha incorretos'}), 401
+            return jsonify({
+                'success': False,
+                'message': 'Email ou senha incorretos'
+            }), 401
         
         # Update login status
         c.execute('UPDATE users SET is_logged_in = 1 WHERE id = ?', (user_id,))
@@ -322,6 +359,7 @@ def login():
         }
         
         return jsonify({
+            'success': True,
             'message': 'Login realizado com sucesso',
             'token': token,
             'user': {
@@ -332,7 +370,10 @@ def login():
         }), 200
     
     except Exception as e:
-        return jsonify({'message': f'Erro ao fazer login: {str(e)}'}), 500
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao fazer login. Por favor, tente novamente.'
+        }), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
@@ -639,6 +680,35 @@ def get_book(book_id):
     except Exception as e:
         return jsonify({'message': f'Erro ao buscar livro: {str(e)}'}), 500
 
+@app.route('/books/<int:book_id>', methods=['DELETE'])
+def delete_book(book_id):
+    """Delete a book from the database"""
+    try:
+        conn = get_db_books()
+        cursor = conn.cursor()
+        
+        # Verify book exists
+        cursor.execute('SELECT id, title FROM books WHERE id = ?', (book_id,))
+        book = cursor.fetchone()
+        
+        if not book:
+            conn.close()
+            return jsonify({'error': 'Livro não encontrado'}), 404
+        
+        # Delete the book
+        cursor.execute('DELETE FROM books WHERE id = ?', (book_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Livro "{book["title"]}" deletado com sucesso',
+            'book_id': book_id
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': f'Erro ao deletar livro: {str(e)}'}), 500
+
+
 @app.route('/api/admin/loans/<int:loan_id>/return', methods=['PUT'])
 @verificar_token
 def admin_return_loan(token, loan_id):
@@ -886,7 +956,15 @@ def get_pending_loan_requests(token):
 @app.route('/api/admin/loan-requests/<int:request_id>/reject', methods=['PUT'])
 @verificar_token
 def reject_loan_request(token, request_id):
+    """Reject a loan request"""
     try:
+        # Get admin info
+        if token not in ADMIN_SESSIONS:
+            return jsonify({'mensagem': 'Sessão inválida.'}), 401
+        
+        admin = ADMIN_SESSIONS[token]
+        admin_id = admin['id']
+        
         conn = sqlite3.connect(USERS_DB)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -907,21 +985,26 @@ def reject_loan_request(token, request_id):
             conn.close()
             return jsonify({'error': 'Solicitação já foi processada'}), 400
 
+        # Update loan request status to rejected with admin info
+        rejected_at = datetime.now().isoformat()
         cursor.execute('''
             UPDATE loan_requests
-            SET status = 'rejected'
+            SET status = 'rejected', approved_by = ?, approved_at = ?
             WHERE id = ?
-        ''', (request_id,))
+        ''', (admin_id, rejected_at, request_id))
 
         conn.commit()
         conn.close()
 
         return jsonify({
-            'message': 'Solicitação recusada com sucesso'
+            'success': True,
+            'message': 'Solicitação rejeitada com sucesso',
+            'request_id': request_id,
+            'status': 'rejected'
         }), 200
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/admin/loan-requests/<int:request_id>/approve', methods=['PUT'])
 @verificar_token
